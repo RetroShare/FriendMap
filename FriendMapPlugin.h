@@ -41,7 +41,7 @@ public:
 
     std::string getShortPluginDescription() const;
     std::string getPluginName() const;
-    void getPluginVersion(int& major,int& minor,int& svn_rev) const;
+    void getPluginVersion(int& major, int& minor, int& build, int& svn_rev) const;
 
     //
     //========================== Plugin Interface ================================//
