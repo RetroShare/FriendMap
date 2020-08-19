@@ -57,7 +57,7 @@ private:
     const FriendMapSettings* mSettings;
     bool showingLinks;
     RsPeers* rsPeers;
-    RsDisc* rsDisc;
+    RsDisc* mRsDisc;
     GeoIP* geoip;
 };
 

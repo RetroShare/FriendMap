@@ -4,6 +4,11 @@ TARGET = FriendMap
 
 CONFIG += qt uic qrc resources
 
+greaterThan(QT_MAJOR_VERSION, 4) {
+    # Qt 5
+    QT += widgets
+}
+
 HEADERS -= upnp/upnputil.h
 SOURCES -= upnp/upnputil.c
 
@@ -41,7 +46,7 @@ SOURCES += \
 win32{
     LIBS += -lmarblewidget
 } else {
-    LIBS += -lmarblewidget -lGeoIP
+    LIBS += -lmarblewidget-qt5 -lGeoIP
 }
 
 FORMS += \

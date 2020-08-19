@@ -41,7 +41,7 @@
 PaintLayer::PaintLayer(RsPeers *peers, RsDisc *disc, const FriendMapSettings *settings)
 {
     this->rsPeers = peers;
-    this->rsDisc = disc;
+    this->mRsDisc = disc;
     this->mSettings = settings;
     const std::string& geoip_data_path = settings->getGeoIpDataPath();
     showingLinks = settings->getShowLinks();
@@ -92,8 +92,8 @@ QStringList PaintLayer::renderPosition() const
 //!
 class GeoPeerLoc{
 public:
-    QString gpg_id;
-    QString ssl_id;
+    RsPgpId pgp_id;
+    RsPeerId ssl_id;
     QString name;
     GeoDataCoordinates coord;
     GeoDataCoordinates coordOff;
@@ -105,10 +105,10 @@ public:
 //!
 class GeoPeer{
 public:
-    QString gpg_id;
+    RsPgpId pgp_id;
     QList<GeoPeerLoc> locations;
     //QMap<QString, GeoPeer> connections;//could use this
-    QList<std::string> connectionsList;
+    QList<RsPgpId> connectionsList;
     QPixmap avatar;
 };
 
@@ -117,32 +117,29 @@ public:
 //!
 
 QList<GeoPeer> geoPeers;
-QMap<std::string, GeoPeer> peerTable;
+QMap<RsPgpId, GeoPeer> peerTable;
 void PaintLayer::genPeerCache(){
 
     srand(42);
 
-    std::list<std::string> gpg_ids;
-    rsPeers->getGPGAcceptedList(gpg_ids);
-    gpg_ids.push_back(rsPeers->getGPGId(rsPeers->getOwnId()));
+    std::list<RsPgpId> pgp_ids;
+    rsPeers->getGPGAcceptedList(pgp_ids);
+    pgp_ids.push_back(rsPeers->getGPGId(rsPeers->getOwnId()));
 
-    //QList<GeoPeer> geoPeers;
-    //QMap<QString, GeoPeer> peerTable;
     geoPeers.clear();
     peerTable.clear();
     //LIST GPG
-    foreach(const std::string& gpg_id, gpg_ids){
+    foreach(const RsPgpId& pgp_id, pgp_ids){
         GeoPeer gFriend;
         gFriend.locations.clear();
         RsPeerDetails peer_details;
-        //rsPeers->getGPGDetails(gpg_id, gpg_detail);
-        rsPeers->getPeerDetails(gpg_id, peer_details);
+        rsPeers->getGPGDetails(pgp_id, peer_details);
 
-        std::list<std::string> ssl_ids;
-        rsPeers->getAssociatedSSLIds(gpg_id, ssl_ids);
+        std::list<RsPeerId> ssl_ids;
+        rsPeers->getAssociatedSSLIds(pgp_id, ssl_ids);
 
         //LIST SSL
-        foreach(const std::string& ssl_id, ssl_ids){
+        foreach(const RsPeerId& ssl_id, ssl_ids){
             RsPeerDetails peer_ssl_details;
             rsPeers->getPeerDetails(ssl_id, peer_ssl_details);
             if(peer_ssl_details.extAddr.compare("0.0.0.0")){
@@ -154,7 +151,7 @@ void PaintLayer::genPeerCache(){
 
                     float rr = ((double) rand() / (RAND_MAX))*PI*2.0f;
                     sLocation.coordOff = GeoDataCoordinates(r->longitude+cos(rr)*0.3f, r->latitude+sin(rr)*0.3f, 0.0, GeoDataCoordinates::Degree);
-                    sLocation.ssl_id = QString::fromStdString(ssl_id);
+                    sLocation.ssl_id = ssl_id;
                     sLocation.name = QString::fromUtf8(peer_ssl_details.name.c_str());
                     gFriend.locations.push_back(sLocation);
                     GeoIPRecord_delete(r);
@@ -164,14 +161,14 @@ void PaintLayer::genPeerCache(){
 
         }
         if(gFriend.locations.length()>0){
-            gFriend.gpg_id = QString::fromStdString(gpg_id);
+            gFriend.pgp_id = pgp_id;
 
             if(mSettings->getShowAvatars()){
-                AvatarDefs::getAvatarFromGpgId(gpg_id, gFriend.avatar);
+                AvatarDefs::getAvatarFromGpgId(pgp_id, gFriend.avatar);
                 gFriend.avatar = gFriend.avatar.scaledToWidth(22);
             }
             geoPeers.push_back(gFriend);
-            peerTable.insert(gpg_id,gFriend);
+            peerTable.insert(pgp_id,gFriend);
         }
 
     }
@@ -180,16 +177,15 @@ void PaintLayer::genPeerCache(){
     QList<GeoPeer>::iterator geoPeer;
     for (geoPeer = geoPeers.begin(); geoPeer != geoPeers.end(); ++geoPeer){
         //foreach(GeoPeer geoPeer, geoPeers){
-        std::list<std::string> friendList;
-        rsDisc->getDiscGPGFriends(geoPeer->gpg_id.toStdString(), friendList);
-        //geoPeer->connections.clear();
+        std::list<RsPgpId> pgpFriendList;
+        mRsDisc->getDiscPgpFriends(geoPeer->pgp_id, pgpFriendList);
         geoPeer->connectionsList.clear();
-        foreach(const std::string& gpg_id, friendList){
-            if (peerTable.contains(gpg_id)){
+        foreach(const RsPgpId& pgp_id, pgpFriendList){
+            if (peerTable.contains(pgp_id)){
                 //QString q_id = QString::fromStdString(gpg_id);
                 //GeoPeer gp = peerTable[q_id];
                 //geoPeer->connections.insert(q_id,gp);
-                geoPeer->connectionsList.push_back(gpg_id);
+                geoPeer->connectionsList.push_back(pgp_id);
             }
         }
 
@@ -223,7 +219,7 @@ bool PaintLayer::render( GeoPainter *painter, ViewportParams *viewport,
             if(mSettings->getShowAvatars())
                 painter->drawPixmap(coord, geoPeer.avatar);
 
-            if(rsPeers->isOnline(geoPeerLoc.ssl_id.toStdString()))
+            if(rsPeers->isOnline(geoPeerLoc.ssl_id))
                 painter->setPen(Qt::green);
             else
                 painter->setPen(Qt::red);
@@ -245,8 +241,8 @@ bool PaintLayer::render( GeoPainter *painter, ViewportParams *viewport,
 
             if(showingLinks){
                 painter->setPen(Qt::yellow);
-                foreach(const std::string& gpg_id, geoPeer.connectionsList){
-                    GeoPeer other = peerTable[gpg_id];
+                foreach(const RsPgpId& pgp_id, geoPeer.connectionsList){
+                    GeoPeer other = peerTable[pgp_id];
                     if (other.locations.length()>0){
                         GeoPeerLoc oloc = other.locations.first();
                         GeoDataLineString conLine;
